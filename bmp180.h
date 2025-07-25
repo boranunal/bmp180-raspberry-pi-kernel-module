@@ -20,6 +20,7 @@
 #include <linux/i2c.h>
 #include <linux/device.h>
 #include <linux/module.h> 
+#include <linux/workqueue.h>
 
 #define BMP180_DEV_ADDR 0x77
 #define BMP180_DEV_ID_REG 0xD0
@@ -38,6 +39,8 @@
 #define BMP180_CONVERSION_TIME(oss) \
 	((oss) == 0 ? 4500 : (oss) == 1 ? 7500 : (oss) == 2 ? 13500 : 25500) 
 
+struct bmp180_handle;
+
 typedef struct{
 	short AC1;
 	short AC2;
@@ -52,24 +55,38 @@ typedef struct{
 	short MD;
 } BMP180_EEPROM_t;
 
-typedef struct{
-	BMP180_EEPROM_t calib;
-	struct i2c_client *client;
+typedef struct {
 	u8 *raw_data;	// Buffer for uncompansated data
 	s32 ut, up;		// Uncompensated temperature and pressure
 	s32 b5;			// Intermediate value for temperature calculation
 	u8 oss;		// Oversampling setting
+	u8 state;
+}BMP180_data_t;
+
+typedef struct {
+	s32 temperature;
+	s32 pressure;
+} BMP180_Sensor_Results_t;
+
+struct bmp180_work {
+    struct work_struct work;
+    struct bmp180_handle *hbmp180;
+};
+
+typedef struct bmp180_handle {
+	BMP180_EEPROM_t calib;
+	struct i2c_client *client;
+	struct timer_list delay_timer;
+	struct workqueue_struct *wq;
+	struct bmp180_work *work_data;
+	BMP180_data_t data;
+	BMP180_Sensor_Results_t results;
 } BMP180_Handle_t;
 
 struct timer_data {
 	struct timer_list timer;
 	BMP180_Handle_t *hbmp180;
 };
-
-typedef struct {
-	s32 temperature;
-	s32 pressure;
-} BMP180_Sensor_Results_t;
 
 typedef enum {
 	BMP180_OK = 0,
@@ -84,7 +101,9 @@ BMP180_Status_t BMP180_read_ut(BMP180_Handle_t *hbmp180);
 BMP180_Status_t BMP180_read_up(BMP180_Handle_t *hbmp180);
 s32 BMP180_calc_temp(BMP180_Handle_t *hbmp180);
 s32 BMP180_calc_pres(BMP180_Handle_t *hbmp180);
-BMP180_Status_t BMP180_get_sensor_results(BMP180_Handle_t *hbmp180, BMP180_Sensor_Results_t *results);
+static void bmp180_work_handler(struct work_struct *work);
+static void bmp180_timer_callback(struct timer_list *t);
+static void bmp180_delay_timer_callback(struct timer_list *t);
 static int bmp180_probe(struct i2c_client *client);
 static void bmp180_remove(struct i2c_client *client);
 
