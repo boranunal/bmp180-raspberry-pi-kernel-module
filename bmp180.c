@@ -71,7 +71,6 @@ BMP180_Status_t BMP180_init(BMP180_Handle_t *hbmp180) {
 	hbmp180->data.up = 0;
 	hbmp180->data.b5 = 0;
     hbmp180->data.oss = 0;
-    hbmp180->data.state = 0;
 
     // Parse calibration data
     hbmp180->calib.AC1 = (calib_buffer[0] << 8) | calib_buffer[1];
@@ -100,8 +99,17 @@ BMP180_Status_t BMP180_read_ut(BMP180_Handle_t *hbmp180) {
         dev_err(&hbmp180->client->dev, "Failed to write temperature read command\n");
         return BMP180_ERROR;
     }
-    hbmp180->data.state = 1;
-    mod_timer(&hbmp180->delay_timer, jiffies + usecs_to_jiffies(4500)); // Wait for conversion to complete
+
+    usleep_range(4500, 5000);
+
+    if(i2c_read_block(hbmp180->client, BMP180_DATA_REG_MSB, hbmp180->data.raw_data, 2) < 0) {
+        dev_err(&hbmp180->client->dev, "Failed to read uncompensated temperature data\n");
+        return BMP180_ERROR;
+    }
+    hbmp180->data.ut = (hbmp180->data.raw_data[0] << 8) | hbmp180->data.raw_data[1];
+    hbmp180->results.temperature = BMP180_calc_temp(hbmp180);
+    dev_info(&hbmp180->client->dev, "Temperature: %d C", hbmp180->results.temperature);
+
     return BMP180_OK;
 }
 
@@ -116,8 +124,18 @@ BMP180_Status_t BMP180_read_up(BMP180_Handle_t *hbmp180) {
         dev_err(&hbmp180->client->dev, "Failed to write pressure read command\n");
         return BMP180_ERROR;
     }
-    hbmp180->data.state = 3;;
-    mod_timer(&hbmp180->delay_timer, jiffies + usecs_to_jiffies(BMP180_CONVERSION_TIME(hbmp180->data.oss))); 
+
+    usleep_range(BMP180_CONVERSION_TIME(hbmp180->data.oss), BMP180_CONVERSION_TIME(hbmp180->data.oss) + 500); // Wait for conversion to complete
+
+    if(i2c_read_block(hbmp180->client, BMP180_DATA_REG_MSB, hbmp180->data.raw_data, 3) < 0) {
+        dev_err(&hbmp180->client->dev, "Failed to read uncompensated pressure data\n");
+        return BMP180_ERROR;
+    }
+
+    hbmp180->data.up = ((hbmp180->data.raw_data[0] << 16) | (hbmp180->data.raw_data[1] << 8) | hbmp180->data.raw_data[2]) >> (8 - hbmp180->data.oss);
+    hbmp180->results.pressure = BMP180_calc_pres(hbmp180);
+    dev_info(&hbmp180->client->dev, "Pressure: %d Pa", hbmp180->results.pressure);
+    
     return BMP180_OK;
 }
 
@@ -157,19 +175,18 @@ s32 BMP180_calc_pres(BMP180_Handle_t *hbmp180) {
 	return p;
 }
 
+
 static void bmp180_work_handler(struct work_struct *work) {
     struct bmp180_work *bmp_work = container_of(work, struct bmp180_work, work);
     BMP180_Handle_t *hbmp180 = bmp_work->hbmp180;
     
-    // Now we're in process context - I2C operations are safe
     dev_info(&hbmp180->client->dev, "BMP180 work handler triggered\\n");
     
-    hbmp180->data.state = 0;
-    if (BMP180_read_ut(hbmp180) == BMP180_OK) {
-        dev_info(&hbmp180->client->dev, "Reading temperature...\n");
+    if(BMP180_read_ut(hbmp180) != BMP180_OK) {
+        return;
     }
-    else {
-        dev_err(&hbmp180->client->dev, "Failed to get sensor results\n");
+    if(BMP180_read_up(hbmp180) != BMP180_OK) {
+        return;
     }
 }
 
@@ -182,53 +199,11 @@ static void bmp180_timer_callback(struct timer_list *t) {
     BMP180_Handle_t *hbmp180 = tmd->hbmp180;
     dev_info(&hbmp180->client->dev, "BMP180 timer callback triggered\n");
     printk(KERN_INFO "BMP180 timer callback triggered\n");
-    hbmp180->data.state = 0;
 
 
     mod_timer(&tmd->timer, jiffies + msecs_to_jiffies(5000));
 }
 
-static void bmp180_delay_timer_callback(struct timer_list *t) {
-    BMP180_Handle_t *hbmp180 = from_timer(hbmp180, t, delay_timer);
-    if(!hbmp180) {
-        return;
-    }
-    dev_info(&hbmp180->client->dev, "BMP180 delay timer callback triggered\n");
-    printk(KERN_INFO "BMP180 delay timer callback triggered\n");
-    
-    if(hbmp180->data.state == 1){
-        if(i2c_read_block(hbmp180->client, BMP180_DATA_REG_MSB, hbmp180->data.raw_data, 2) < 0) {
-            dev_err(&hbmp180->client->dev, "Failed to read uncompensated temperature data\n");
-            hbmp180->data.state = 0;
-            return;
-        }
-        hbmp180->data.ut = (hbmp180->data.raw_data[0] << 8) | hbmp180->data.raw_data[1];
-        hbmp180->results.temperature = BMP180_calc_temp(hbmp180);
-        dev_info(&hbmp180->client->dev, "Temperature: %d C", hbmp180->results.temperature);
-        hbmp180->data.state = 2;
-        if(BMP180_read_up(hbmp180) != BMP180_OK) {
-            dev_err(&hbmp180->client->dev, "Failed to read uncompensated pressure\n");
-            hbmp180->data.state = 0;
-            return;
-        }
-    }
-
-    else if(hbmp180->data.state == 3) {
-        if(i2c_read_block(hbmp180->client, BMP180_DATA_REG_MSB, hbmp180->data.raw_data, 3) < 0) {
-            dev_err(&hbmp180->client->dev, "Failed to read uncompensated pressure data\n");
-            hbmp180->data.state = 0;
-            return;
-        }
-        hbmp180->data.up = ((hbmp180->data.raw_data[0] << 16) | (hbmp180->data.raw_data[1] << 8) | hbmp180->data.raw_data[2]) >> (8 - hbmp180->data.oss);
-        hbmp180->results.pressure = BMP180_calc_pres(hbmp180);
-        dev_info(&hbmp180->client->dev, "Pressure: %d Pa", hbmp180->results.pressure);
-        hbmp180->data.state = 0;
-    }
-
-    else {
-        dev_err(&hbmp180->client->dev, "Wrong state\n");
-    }
-}
 
 static int bmp180_probe(struct i2c_client *client){
     printk(KERN_INFO "BMP180 probe function called\n");
@@ -272,7 +247,6 @@ static int bmp180_probe(struct i2c_client *client){
     INIT_WORK(&tmd->hbmp180->work_data->work, bmp180_work_handler);
 
     i2c_set_clientdata(client, tmd);
-    timer_setup(&tmd->hbmp180->delay_timer, bmp180_delay_timer_callback, 0);
     timer_setup(&tmd->timer, bmp180_timer_callback, 0);
     mod_timer(&tmd->timer, jiffies + msecs_to_jiffies(5000));
 
@@ -288,7 +262,6 @@ static void bmp180_remove(struct i2c_client *client)
         // Delete both timers
         del_timer_sync(&tmd->timer);
         if(tmd->hbmp180) {
-            del_timer_sync(&tmd->hbmp180->delay_timer);
 
             if (tmd->hbmp180->work_data) {
             cancel_work_sync(&tmd->hbmp180->work_data->work);

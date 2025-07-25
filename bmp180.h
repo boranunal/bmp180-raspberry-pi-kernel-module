@@ -60,7 +60,6 @@ typedef struct {
 	s32 ut, up;		// Uncompensated temperature and pressure
 	s32 b5;			// Intermediate value for temperature calculation
 	u8 oss;		// Oversampling setting
-	u8 state;
 }BMP180_data_t;
 
 typedef struct {
@@ -76,7 +75,6 @@ struct bmp180_work {
 typedef struct bmp180_handle {
 	BMP180_EEPROM_t calib;
 	struct i2c_client *client;
-	struct timer_list delay_timer;
 	struct workqueue_struct *wq;
 	struct bmp180_work *work_data;
 	BMP180_data_t data;
@@ -103,7 +101,6 @@ s32 BMP180_calc_temp(BMP180_Handle_t *hbmp180);
 s32 BMP180_calc_pres(BMP180_Handle_t *hbmp180);
 static void bmp180_work_handler(struct work_struct *work);
 static void bmp180_timer_callback(struct timer_list *t);
-static void bmp180_delay_timer_callback(struct timer_list *t);
 static int bmp180_probe(struct i2c_client *client);
 static void bmp180_remove(struct i2c_client *client);
 
