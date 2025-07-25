@@ -1,6 +1,26 @@
+/* |===========================================================================================|
+ * |   bmp180.c                                                                                |
+ * |                                                                                           |
+ * |   Author: Utku Boran Unal <boranutku@protonmail.com>                                      |
+ * |   Description: This is a simple driver for the BMP180 pressure and temperature sensor.    |
+ * |             Made for educational purposes, it provides basic functionality to read        |
+ * |                 temperature and pressure data.                                            |
+ * |                                                                                           |
+ * |===========================================================================================|
+*/
+
 #include "bmp180.h"
 
 
+/*
+    * Helper function to read a single byte from a BMP180 register
+    * Reads a single byte from the specified register of the BMP180 sensor
+    *
+    * @client: Pointer to the I2C client structure
+    * @reg: Register address to read from
+    * 
+    * Returns: The read byte value or -1 on error
+*/
 static int i2c_read_byte(const struct i2c_client *client, u8 reg) {
     if(i2c_master_send(client, &reg, 1) < 0) {
         dev_err(&client->dev, "Failed to write register address\n");
@@ -13,7 +33,16 @@ static int i2c_read_byte(const struct i2c_client *client, u8 reg) {
     }
     return data;
 }
-
+/*
+    * Helper function to write a single byte to a BMP180 register
+    * Writes a single byte to the specified register of the BMP180 sensor
+    *
+    * @client: Pointer to the I2C client structure
+    * @reg: Register address to write to
+    * @value: Value to write to the register
+    * 
+    * Returns: 0 on success, -1 on error
+*/
 static int i2c_write_byte(const struct i2c_client *client, u8 reg, u8 value) {
     u8 buf[2] = {reg, value};
     if(i2c_master_send(client, buf, 2) < 0) {
@@ -22,7 +51,17 @@ static int i2c_write_byte(const struct i2c_client *client, u8 reg, u8 value) {
     }
     return 0;
 }
-
+/*
+    * Helper function to read a block of data from a BMP180 register
+    * Reads a block of data from the specified register of the BMP180 sensor
+    *
+    * @client: Pointer to the I2C client structure
+    * @reg: Register address to read from
+    * @buf: Buffer to store the read data
+    * @len: Length of the data to read
+    * 
+    * Returns: 0 on success, -1 on error
+*/
 static int i2c_read_block(const struct i2c_client *client, u8 reg, u8 *buf, size_t len) {
     if(i2c_master_send(client, &reg, 1) < 0) {
         dev_err(&client->dev, "Failed to write register address for block read\n");
@@ -174,7 +213,11 @@ s32 BMP180_calc_pres(BMP180_Handle_t *hbmp180) {
 	p=p+(x1+x2+3791)/16;
 	return p;
 }
-
+/*
+    * Work handler for processing BMP180 data
+    *
+    * @work: Pointer to the work structure
+*/
 
 static void bmp180_work_handler(struct work_struct *work) {
     struct bmp180_work *bmp_work = container_of(work, struct bmp180_work, work);
@@ -190,6 +233,10 @@ static void bmp180_work_handler(struct work_struct *work) {
     }
 }
 
+/*
+ * Timer callback function for periodic BMP180 data processing
+*/
+
 static void bmp180_timer_callback(struct timer_list *t) {
     struct timer_data *tmd = from_timer(tmd, t, timer);
     if(!tmd || !tmd->hbmp180 || !tmd->hbmp180->work_data) return;
@@ -204,6 +251,9 @@ static void bmp180_timer_callback(struct timer_list *t) {
     mod_timer(&tmd->timer, jiffies + msecs_to_jiffies(5000));
 }
 
+/*
+ * Probe function for the BMP180 I2C device
+*/
 
 static int bmp180_probe(struct i2c_client *client){
     printk(KERN_INFO "BMP180 probe function called\n");
@@ -254,7 +304,9 @@ static int bmp180_probe(struct i2c_client *client){
 
     return 0;
 }
-
+/*
+    * Remove function for the BMP180 I2C device
+*/
 static void bmp180_remove(struct i2c_client *client)
 {
     struct timer_data *tmd = i2c_get_clientdata(client);

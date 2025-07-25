@@ -1,11 +1,13 @@
-/*
- * Author: Utku Boran Unal
- * 
- * bmp180.h
- * 
- * This header file defines the structures, constants, and function prototypes
- * for interacting with the BMP180 pressure and temperature sensor.
- *
+/*|================================================================================|
+ *|                                                                                | 
+ *|	Author: Utku Boran Unal                                                        |
+ *|                                                                                |
+ *| bmp180.h                                                                       |
+ *|                                                                                |
+ *| This header file defines the structures, constants, and function prototypes    |
+ *| for interacting with the BMP180 pressure and temperature sensor.               |
+ *|                                                                                |
+ *|================================================================================|
 */
 
 #ifndef BMP180_H
