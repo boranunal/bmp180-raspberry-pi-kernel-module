@@ -15,7 +15,7 @@ CROSS_COMPILE ?= aarch64-linux-gnu-
 
 # Kernel source directory - MUST be specified
 # Example: make KDIR=/path/to/rpi/linux/headers
-KDIR ?= /home/boran/pi-kernel/kernel/linux
+KDIR ?= 
 
 # Default kernel directory for native compilation (if not cross-compiling)
 ifeq ($(KDIR),)
