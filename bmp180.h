@@ -18,6 +18,7 @@
 #include <linux/timer.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
+#include <linux/device.h>
 #include <linux/module.h> 
 
 #define BMP180_DEV_ADDR 0x77
@@ -54,16 +55,19 @@ typedef struct{
 typedef struct{
 	BMP180_EEPROM_t calib;
 	struct i2c_client *client;
-	struct timer_list timer;
 	u8 *raw_data;	// Buffer for uncompansated data
 	s32 ut, up;		// Uncompensated temperature and pressure
 	s32 b5;			// Intermediate value for temperature calculation
 	u8 oss;		// Oversampling setting
 } BMP180_Handle_t;
 
+struct timer_data {
+	struct timer_list timer;
+	BMP180_Handle_t *hbmp180;
+};
 
 typedef struct {
-	double temperature;
+	s32 temperature;
 	s32 pressure;
 } BMP180_Sensor_Results_t;
 
@@ -72,16 +76,16 @@ typedef enum {
 	BMP180_ERROR = -1,
 } BMP180_Status_t;
 
-int i2c_read_byte(const struct i2c_client *client, u8 reg);
-int i2c_write_byte(const struct i2c_client *client, u8 reg, u8 value);
-int i2c_read_block(const struct i2c_client *client, u8 reg, u8 *buf, size_t len);
+static int i2c_read_byte(const struct i2c_client *client, u8 reg);
+static int i2c_write_byte(const struct i2c_client *client, u8 reg, u8 value);
+static int i2c_read_block(const struct i2c_client *client, u8 reg, u8 *buf, size_t len);
 BMP180_Status_t BMP180_init(BMP180_Handle_t *hbmp180);
 BMP180_Status_t BMP180_read_ut(BMP180_Handle_t *hbmp180);
 BMP180_Status_t BMP180_read_up(BMP180_Handle_t *hbmp180);
 s32 BMP180_calc_temp(BMP180_Handle_t *hbmp180);
 s32 BMP180_calc_pres(BMP180_Handle_t *hbmp180);
 BMP180_Status_t BMP180_get_sensor_results(BMP180_Handle_t *hbmp180, BMP180_Sensor_Results_t *results);
-int bmp180_probe(struct i2c_client *client, const struct i2c_device_id *id);
-int bmp180_remove(struct i2c_client *client);
+static int bmp180_probe(struct i2c_client *client);
+static void bmp180_remove(struct i2c_client *client);
 
 #endif // BMP180_H

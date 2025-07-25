@@ -1,35 +1,35 @@
 #include "bmp180.h"
 
 
-int i2c_read_byte(const struct i2c_client *client, u8 reg) {
+static int i2c_read_byte(const struct i2c_client *client, u8 reg) {
     if(i2c_master_send(client, &reg, 1) < 0) {
-        dev_err(client->dev, "Failed to write register address\n");
+        dev_err(&client->dev, "Failed to write register address\n");
         return -1;
     }
     u8 data;
     if(i2c_master_recv(client, &data, 1) < 0) {
-        dev_err(client->dev, "Failed to read data from register\n");
+        dev_err(&client->dev, "Failed to read data from register\n");
         return -1;
     }
     return data;
 }
 
-int i2c_write_byte(const struct i2c_client *client, u8 reg, u8 value) {
+static int i2c_write_byte(const struct i2c_client *client, u8 reg, u8 value) {
     u8 buf[2] = {reg, value};
     if(i2c_master_send(client, buf, 2) < 0) {
-        dev_err(client->dev, "Failed to write data to register\n");
+        dev_err(&client->dev, "Failed to write data to register\n");
         return -1;
     }
     return 0;
 }
 
-int i2c_read_block(const struct i2c_client *client, u8 reg, u8 *buf, size_t len) {
+static int i2c_read_block(const struct i2c_client *client, u8 reg, u8 *buf, size_t len) {
     if(i2c_master_send(client, &reg, 1) < 0) {
-        dev_err(client->dev, "Failed to write register address for block read\n");
+        dev_err(&client->dev, "Failed to write register address for block read\n");
         return -1;
     }
     if(i2c_master_recv(client, buf, len) < 0) {
-        dev_err(client->dev, "Failed to read block data from register\n");
+        dev_err(&client->dev, "Failed to read block data from register\n");
         return -1;
     }
     return 0;
@@ -46,22 +46,23 @@ int i2c_read_block(const struct i2c_client *client, u8 reg, u8 *buf, size_t len)
 BMP180_Status_t BMP180_init(BMP180_Handle_t *hbmp180) {
     u8 calib_buffer[22];
     u8 dev_id;
+
     // Try to read id register
     dev_id = i2c_read_byte(hbmp180->client, BMP180_DEV_ID_REG);
     if(dev_id != BMP180_DEV_ID) {
-        dev_err(hbmp180->client->dev, "I2C read failed! BMP180 device ID mismatch\n");
+        dev_err(&hbmp180->client->dev, "I2C read failed! BMP180 device ID mismatch\n");
         return BMP180_ERROR;
     }
     // Soft reset
     if(i2c_write_byte(hbmp180->client, BMP180_RST_REG, BMP180_RST_CMD) < 0) {
-        dev_err(hbmp180->client->dev, "Soft reset failed\n");
+        dev_err(&hbmp180->client->dev, "Soft reset failed\n");
         return BMP180_ERROR;
     }
-    msleep(100); // Wait for reset to complete
+    udelay(10000); // Wait for reset to complete
 
     // Read calibration data
     if(i2c_read_block(hbmp180->client, BMP180_EEPROM_ADDR, calib_buffer, BMP180_EEPROM_SIZE) < 0){
-        dev_err(hbmp180->client->dev, "Failed to read calibration data\n");
+        dev_err(&hbmp180->client->dev, "Failed to read calibration data\n");
         return BMP180_ERROR;
     }
 
@@ -69,7 +70,7 @@ BMP180_Status_t BMP180_init(BMP180_Handle_t *hbmp180) {
     hbmp180->ut = 0;
 	hbmp180->up = 0;
 	hbmp180->b5 = 0;
-    hbmp180->oss = 1;
+    hbmp180->oss = 0;
 
     // Parse calibration data
     hbmp180->calib.AC1 = (calib_buffer[0] << 8) | calib_buffer[1];
@@ -84,7 +85,8 @@ BMP180_Status_t BMP180_init(BMP180_Handle_t *hbmp180) {
     hbmp180->calib.MC = (calib_buffer[18] << 8) | calib_buffer[19];
     hbmp180->calib.MD = (calib_buffer[20] << 8) | calib_buffer[21];
 
-    dev_info(hbmp180->client->dev, "BMP180 initialized successfully\n");
+    dev_info(&hbmp180->client->dev, "BMP180 initialized successfully\n");
+    
     return BMP180_OK;
 }
 
@@ -94,13 +96,13 @@ BMP180_Status_t BMP180_init(BMP180_Handle_t *hbmp180) {
 */
 BMP180_Status_t BMP180_read_ut(BMP180_Handle_t *hbmp180) {
     if(i2c_write_byte(hbmp180->client, BMP180_CTL_REG, BMP180_READ_TEMP_CMD) < 0) {
-        dev_err(hbmp180->client->dev, "Failed to write temperature read command\n");
+        dev_err(&hbmp180->client->dev, "Failed to write temperature read command\n");
         return BMP180_ERROR;
     }
     usleep_range(4500, 5000); // Wait for conversion to complete
     
     if(i2c_read_block(hbmp180->client, BMP180_DATA_REG_MSB, hbmp180->raw_data, 2) < 0) {
-        dev_err(hbmp180->client->dev, "Failed to read uncompensated temperature data\n");
+        dev_err(&hbmp180->client->dev, "Failed to read uncompensated temperature data\n");
         return BMP180_ERROR;
     }
     hbmp180->ut = (hbmp180->raw_data[0] << 8) | hbmp180->raw_data[1];
@@ -115,14 +117,14 @@ BMP180_Status_t BMP180_read_up(BMP180_Handle_t *hbmp180) {
     u8 cmd = BMP180_READ_PRES_CMD + (hbmp180->oss << 6);
     
     if(i2c_write_byte(hbmp180->client, BMP180_CTL_REG, cmd) < 0) {
-        dev_err(hbmp180->client->dev, "Failed to write pressure read command\n");
+        dev_err(&hbmp180->client->dev, "Failed to write pressure read command\n");
         return BMP180_ERROR;
     }
 
     usleep_range(BMP180_CONVERSION_TIME(hbmp180->oss), BMP180_CONVERSION_TIME(hbmp180->oss) + 500); // Wait for conversion to complete
 
     if(i2c_read_block(hbmp180->client, BMP180_DATA_REG_MSB, hbmp180->raw_data, 3) < 0) {
-        dev_err(hbmp180->client->dev, "Failed to read uncompensated pressure data\n");
+        dev_err(&hbmp180->client->dev, "Failed to read uncompensated pressure data\n");
         return BMP180_ERROR;
     }
     hbmp180->up = ((hbmp180->raw_data[0] << 16) | (hbmp180->raw_data[1] << 8) | hbmp180->raw_data[2]) >> (8 - hbmp180->oss);
@@ -177,56 +179,69 @@ BMP180_Status_t BMP180_get_sensor_results(BMP180_Handle_t *hbmp180, BMP180_Senso
     if(BMP180_read_up(hbmp180) != BMP180_OK) {
         return BMP180_ERROR;
     }
-    results->temperature = BMP180_calc_temp(hbmp180) / 10.0;
+    results->temperature = BMP180_calc_temp(hbmp180);
     results->pressure = BMP180_calc_pres(hbmp180);
     return BMP180_OK;
 }
 
 static void bmp180_timer_callback(struct timer_list *t) {
     BMP180_Handle_t *hbmp180 = from_timer(hbmp180, t, timer);
+    dev_info(&hbmp180->client->dev, "BMP180 timer callback triggered\n");
     BMP180_Sensor_Results_t bmp180_results;
     if(BMP180_get_sensor_results(hbmp180, &bmp180_results) == BMP180_OK) {
-        dev_info(hbmp180->client->dev, "Temperature: %.2f C, Pressure: %d Pa",
+        dev_info(&hbmp180->client->dev, "Temperature: %d C, Pressure: %d Pa",
             bmp180_results.temperature, bmp180_results.pressure);
     }
     else {
-        dev_err(hbmp180->client->dev, "Failed to get sensor results\n");
+        dev_err(&hbmp180->client->dev, "Failed to get sensor results\n");
     }
     mod_timer(&hbmp180->timer, jiffies + msecs_to_jiffies(5000));
 }
 
 
-static int bmp180_probe(struct i2c_client *client, const struct i2c_device_id *id)
-{
-    BMP180_Handle_t *hbmp180;
+static int bmp180_probe(struct i2c_client *client){
+    
+    struct timer_data *tmd;
 
-    hbmp180 = devm_kzalloc(&client->dev, sizeof(BMP180_Handle_t), GFP_KERNEL);
-    if (!hbmp180)
+    tmd->hbmp180 = devm_kzalloc(&client->dev, sizeof(BMP180_Handle_t), GFP_KERNEL);
+    if (!tmd->hbmp180)
         return -ENOMEM;
     
-    hbmp180->raw_data = devm_kzalloc(&client->dev, 3, GFP_KERNEL);
-    if (!hbmp180->raw_data)
+    tmd->hbmp180->raw_data = devm_kzalloc(&client->dev, 3, GFP_KERNEL);
+    if (!tmd->hbmp180->raw_data)
         return -ENOMEM;
-    hbmp180->client = client;
-    if (BMP180_init(hbmp180) != BMP180_OK) {
+    tmd->hbmp180->client = client;
+    if (BMP180_init(tmd->hbmp180) != BMP180_OK) {
         dev_err(&client->dev, "BMP180 init failed\n");
         return -EIO;
     }
-    i2c_set_clientdata(client, hbmp180);
+    i2c_set_clientdata(client, tmd);
+    timer_setup(tmd->timer, bmp180_timer_callback, 0);
+    mod_timer(tmd->timer, jiffies + msecs_to_jiffies(5000));
 
-    timer_setup(&hbmp180->timer, bmp180_timer_callback, 0);
-    mod_timer(&hbmp180->timer, jiffies + msecs_to_jiffies(5000));
-
-    dev_info(hbmp180->client->dev, "BMP180 kernel module loaded\n");
+    dev_info(&client->dev, "BMP180 kernel module loaded\n");
     return 0;
 }
 
-static int bmp180_remove(struct i2c_client *client)
+static void bmp180_remove(struct i2c_client *client)
 {
-    BMP180_Handle_t *hbmp180 = i2c_get_clientdata(client);
-    del_timer_sync(&hbmp180->timer);
-    dev_info(hbmp180->client->dev, "BMP180: Device removed\n");
-    return 0;
+    struct timer_data *tmd = i2c_get_clientdata(client);
+    if(tmd) {
+        if(tmd->timer){
+            del_timer_sync(&tmd->timer);
+        }
+        if(tmd->hbmp180) {
+            if(tmd->hbmp180->raw_data) {
+                devm_kfree(&client->dev, tmd->hbmp180->raw_data);
+            }
+            devm_kfree(&client->dev, tmd->hbmp180);
+        }
+        devm_kfree(&client->dev, tmd);
+        dev_info(&tmd->hbmp180->client->dev, "BMP180: Device removed\n");
+    }
+    else {
+        dev_err(&client->dev, "BMP180: No device data found\n");
+    }
 }
 
 static const struct of_device_id bmp180_of_match[] = {
@@ -244,6 +259,7 @@ static const struct i2c_device_id bmp180_id[] = {
 static struct i2c_driver bmp180_driver = {
     .driver = {
         .name = "bmp180",
+        .owner = THIS_MODULE,
         .of_match_table = bmp180_of_match,  // Add this line
     },
     .probe = bmp180_probe,
