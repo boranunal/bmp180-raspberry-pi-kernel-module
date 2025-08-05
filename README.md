@@ -81,7 +81,7 @@ or backup the module:
 mkdir -p ~/.backup/modules
 sudo mv /lib/modules/$(uname -r)/kernel/drivers/iio/pressure/bmp280* ~/.backup/modules/
 ```
-or better yet, if you are willing to spend some time, you can recompile the kernel without the bmp280 module. and install your custom kernel with the bmp180 module.
+or better yet, if you are willing to spend some time, you can recompile the kernel without the bmp280 module, and install your custom kernel with the bmp180 module.
 
 
 ## Acknowledgements
