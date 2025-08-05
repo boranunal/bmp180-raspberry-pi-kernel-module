@@ -86,8 +86,8 @@ or better yet, if you are willing to spend some time, you can recompile the kern
 
 ## Acknowledgements
 
-[Raspberry Pi](https://www.raspberrypi.com/)
-[BMP180 Datasheet](https://cdn-shop.adafruit.com/datasheets/BST-BMP180-DS000-09.pdf)
-[Linux Kernel Documentation](https://www.kernel.org/doc/html/latest/)
+- [Raspberry Pi](https://www.raspberrypi.com/)
+- [BMP180 Datasheet](https://cdn-shop.adafruit.com/datasheets/BST-BMP180-DS000-09.pdf)
+- [Linux Kernel Documentation](https://www.kernel.org/doc/html/latest/)
 
 
